@@ -31,17 +31,16 @@ const client = new Client({
 });
 
 const activeQuizzes = new Map();
-const supportedCommands = new Set(["quiz", "question"]);
 
 client.once(Events.ClientReady, (readyClient) => {
-  readyClient.user.setActivity("fastest answer | /question", {
+  readyClient.user.setActivity("fastest answer | /quiz ask", {
     type: ActivityType.Watching
   });
   console.log(`Logged in as ${readyClient.user.tag}`);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isChatInputCommand() || !supportedCommands.has(interaction.commandName)) {
+  if (!interaction.isChatInputCommand() || interaction.commandName !== "quiz") {
     return;
   }
 
@@ -58,11 +57,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       content: "You need Manage Server or Manage Messages permission to manage questions.",
       ephemeral: true
     });
-    return;
-  }
-
-  if (interaction.commandName === "question") {
-    await handleAsk(interaction);
     return;
   }
 

@@ -46,13 +46,6 @@ function addQuestionOptions(command) {
 }
 
 export const commands = [
-  addQuestionOptions(
-    new SlashCommandBuilder()
-      .setName("question")
-      .setDescription("Start a fastest-answer question in this channel")
-      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-  ),
-
   new SlashCommandBuilder()
     .setName("quiz")
     .setDescription("Question race commands")

@@ -4,7 +4,6 @@
 
 ## คำสั่ง
 
-- `/question question:<คำถาม> answer:<คำตอบ>`
 - `/quiz ask question:<คำถาม> answer:<คำตอบ>`
 - `/quiz stop`
 - `/quiz status`
@@ -12,7 +11,6 @@
 ตัวอย่าง:
 
 ```text
-/question question:1+1 = ? answer:2 seconds:60
 /quiz ask question:1+1 = ? answer:2 seconds:60
 ```
 
