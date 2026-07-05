@@ -1,4 +1,6 @@
 import "dotenv/config";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import {
   ActivityType,
   Client,
@@ -17,10 +19,13 @@ function pick(...names) {
 }
 
 const token = pick("DISCORD_TOKEN", "TOKEN", "BOT_TOKEN");
+const scoresFile = resolve(pick("SCORES_FILE", "POINTS_FILE") || "./scores.json");
 
 if (!token) {
   throw new Error("Missing DISCORD_TOKEN in .env");
 }
+
+let scoreState = await loadScoreState();
 
 const client = new Client({
   intents: [
@@ -74,6 +79,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (subcommand === "status") {
     await handleStatus(interaction);
+    return;
+  }
+
+  if (subcommand === "clearpoints") {
+    await handleClearPoints(interaction);
+    return;
   }
 });
 
@@ -91,12 +102,13 @@ client.on(Events.MessageCreate, async (message) => {
   if (!isCorrect) return;
 
   finishQuiz(message.channelId);
+  const totalPoints = await addPoint(message.guildId, message.author.id);
 
   const elapsedMs = Date.now() - quiz.startedAt;
   const elapsedText = `${(elapsedMs / 1000).toFixed(2)}s`;
 
   await message.channel.send({
-    content: `Correct! ${message.author} answered first. Answer: **${escapeMarkdown(quiz.displayAnswer)}** (${elapsedText})`
+    content: `Correct! ${message.author} answered first. Answer: **${escapeMarkdown(quiz.displayAnswer)}** (${elapsedText}) +1 point. Total: **${totalPoints}**`
   });
 });
 
@@ -114,7 +126,7 @@ async function handleAsk(interaction) {
 
   if (!question || !answerText) {
     await interaction.reply({
-      content: "Missing question or answer. Use `/question question:... answer:...`",
+      content: "Missing question or answer. Use `/quiz ask question:... answer:...`",
       ephemeral: true
     });
     return;
@@ -173,7 +185,11 @@ async function handleAsk(interaction) {
     ephemeral: true
   });
 
-  await interaction.channel.send({ embeds: [embed] });
+  await interaction.channel.send({
+    content: "@everyone",
+    embeds: [embed],
+    allowedMentions: { parse: ["everyone"] }
+  });
 }
 
 async function handleStop(interaction) {
@@ -210,6 +226,15 @@ async function handleStatus(interaction) {
   });
 }
 
+async function handleClearPoints(interaction) {
+  const removedCount = await clearGuildPoints(interaction.guildId);
+
+  await interaction.reply({
+    content: `Cleared quiz points for this server. Removed ${removedCount} player score(s).`,
+    ephemeral: false
+  });
+}
+
 async function timeoutQuiz(channelId) {
   const quiz = activeQuizzes.get(channelId);
   if (!quiz) return;
@@ -228,6 +253,51 @@ function finishQuiz(channelId) {
 
   clearTimeout(quiz.timeout);
   activeQuizzes.delete(channelId);
+}
+
+async function loadScoreState() {
+  try {
+    const raw = await readFile(scoresFile, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!parsed.guilds || typeof parsed.guilds !== "object") {
+      parsed.guilds = {};
+    }
+    return parsed;
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.warn(`Could not load score file: ${error.message}`);
+    }
+    return { guilds: {} };
+  }
+}
+
+async function saveScoreState() {
+  await mkdir(dirname(scoresFile), { recursive: true });
+  const tempPath = `${scoresFile}.${process.pid}.tmp`;
+  await writeFile(tempPath, `${JSON.stringify(scoreState, null, 2)}\n`, "utf8");
+  await rename(tempPath, scoresFile);
+}
+
+function getGuildScores(guildId) {
+  if (!scoreState.guilds[guildId]) {
+    scoreState.guilds[guildId] = {};
+  }
+  return scoreState.guilds[guildId];
+}
+
+async function addPoint(guildId, userId) {
+  const guildScores = getGuildScores(guildId);
+  guildScores[userId] = (guildScores[userId] || 0) + 1;
+  await saveScoreState();
+  return guildScores[userId];
+}
+
+async function clearGuildPoints(guildId) {
+  const guildScores = getGuildScores(guildId);
+  const removedCount = Object.keys(guildScores).length;
+  scoreState.guilds[guildId] = {};
+  await saveScoreState();
+  return removedCount;
 }
 
 function getStringOption(interaction, names) {

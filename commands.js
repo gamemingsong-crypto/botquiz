@@ -67,4 +67,9 @@ export const commands = [
         .setName("status")
         .setDescription("Show the active question in this channel")
     )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("clearpoints")
+        .setDescription("Clear all quiz points in this server")
+    )
 ].map((command) => command.toJSON());

@@ -7,6 +7,7 @@
 - `/quiz ask question:<คำถาม> answer:<คำตอบ>`
 - `/quiz stop`
 - `/quiz status`
+- `/quiz clearpoints`
 
 ตัวอย่าง:
 
@@ -19,6 +20,10 @@
 ```text
 /quiz ask question:เมืองหลวงไทยคืออะไร answer:กรุงเทพ|กรุงเทพฯ|bangkok
 ```
+
+เมื่อมีคนตอบถูกเร็วที่สุด บอทจะเพิ่ม 1 แต้มให้คนนั้นและบอกแต้มรวมในข้อความประกาศผู้ชนะ
+
+คำถามที่เริ่มด้วย `/quiz ask` จะส่งข้อความพร้อม `@everyone`
 
 ## ติดตั้ง
 
@@ -41,6 +46,7 @@ npm start
 DISCORD_TOKEN=token ของบอท
 CLIENT_ID=application/client id
 GUILD_ID=server id ถ้าต้องการให้คำสั่งขึ้นทันที
+SCORES_FILE=./scores.json
 ```
 
 ถ้าไม่ใส่ `GUILD_ID` คำสั่งจะเป็น global และอาจใช้เวลาสักพักกว่าจะขึ้น
