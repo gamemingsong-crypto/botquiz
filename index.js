@@ -104,11 +104,8 @@ client.on(Events.MessageCreate, async (message) => {
   finishQuiz(message.channelId);
   const totalPoints = await addPoint(message.guildId, message.author.id);
 
-  const elapsedMs = Date.now() - quiz.startedAt;
-  const elapsedText = `${(elapsedMs / 1000).toFixed(2)}s`;
-
   await message.channel.send({
-    content: `Correct! ${message.author} answered first. Answer: **${escapeMarkdown(quiz.displayAnswer)}** (${elapsedText}) +1 point. Total: **${totalPoints}**`
+    content: `Correct! ${message.author} answered first. Answer: **${escapeMarkdown(quiz.displayAnswer)}** +1 point. Total: **${totalPoints}**`
   });
 });
 
@@ -132,7 +129,6 @@ async function handleAsk(interaction) {
     return;
   }
 
-  const seconds = getIntegerOption(interaction, ["seconds", "time", "timer"]) ?? 60;
   const matchMode = getStringOption(interaction, ["match", "mode"]) || "exact";
   const caseSensitive = getBooleanOption(interaction, ["case_sensitive", "case"]) ?? false;
 
@@ -153,10 +149,6 @@ async function handleAsk(interaction) {
     return;
   }
 
-  const safeSeconds = Math.min(Math.max(seconds, 5), 3600);
-  const expiresAt = Date.now() + safeSeconds * 1000;
-  const timeout = setTimeout(() => timeoutQuiz(interaction.channelId), safeSeconds * 1000);
-
   activeQuizzes.set(interaction.channelId, {
     guildId: interaction.guildId,
     channelId: interaction.channelId,
@@ -164,10 +156,7 @@ async function handleAsk(interaction) {
     answers,
     displayAnswer: rawAnswers[0],
     matchMode: matchMode === "contains" ? "contains" : "exact",
-    caseSensitive,
-    startedAt: Date.now(),
-    expiresAt,
-    timeout
+    caseSensitive
   });
 
   const embed = new EmbedBuilder()
@@ -175,7 +164,6 @@ async function handleAsk(interaction) {
     .setTitle("Fastest Answer")
     .setDescription(question)
     .addFields(
-      { name: "Time", value: `${safeSeconds}s`, inline: true },
       { name: "Match", value: matchMode === "contains" ? "contains" : "exact", inline: true }
     )
     .setFooter({ text: "Type the answer in this channel. First correct answer wins." });
@@ -219,9 +207,8 @@ async function handleStatus(interaction) {
     return;
   }
 
-  const remainingSeconds = Math.max(0, Math.ceil((quiz.expiresAt - Date.now()) / 1000));
   await interaction.reply({
-    content: `Active question: **${escapeMarkdown(quiz.question)}**\nTime left: ${remainingSeconds}s`,
+    content: `Active question: **${escapeMarkdown(quiz.question)}**`,
     ephemeral: true
   });
 }
@@ -235,23 +222,7 @@ async function handleClearPoints(interaction) {
   });
 }
 
-async function timeoutQuiz(channelId) {
-  const quiz = activeQuizzes.get(channelId);
-  if (!quiz) return;
-
-  finishQuiz(channelId);
-
-  const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (channel?.isTextBased()) {
-    await channel.send(`Time is up! No correct answer. Answer: **${escapeMarkdown(quiz.displayAnswer)}**`);
-  }
-}
-
 function finishQuiz(channelId) {
-  const quiz = activeQuizzes.get(channelId);
-  if (!quiz) return;
-
-  clearTimeout(quiz.timeout);
   activeQuizzes.delete(channelId);
 }
 
@@ -312,18 +283,6 @@ function getStringOption(interaction, names) {
   return "";
 }
 
-function getIntegerOption(interaction, names) {
-  for (const name of names) {
-    try {
-      const value = interaction.options.getInteger(name);
-      if (Number.isInteger(value)) return value;
-    } catch {
-      // Ignore stale command schemas with different option names.
-    }
-  }
-  return null;
-}
-
 function getBooleanOption(interaction, names) {
   for (const name of names) {
     try {
@@ -365,9 +324,6 @@ function escapeMarkdown(value) {
 }
 
 process.on("SIGINT", () => {
-  for (const quiz of activeQuizzes.values()) {
-    clearTimeout(quiz.timeout);
-  }
   process.exit(0);
 });
 

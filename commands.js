@@ -19,14 +19,6 @@ function addQuestionOptions(command) {
         .setRequired(true)
         .setMaxLength(300)
     )
-    .addIntegerOption((option) =>
-      option
-        .setName("seconds")
-        .setDescription("Time limit in seconds, default 60")
-        .setRequired(false)
-        .setMinValue(5)
-        .setMaxValue(3600)
-    )
     .addStringOption((option) =>
       option
         .setName("match")

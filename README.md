@@ -12,7 +12,7 @@
 ตัวอย่าง:
 
 ```text
-/quiz ask question:1+1 = ? answer:2 seconds:60
+/quiz ask question:1+1 = ? answer:2
 ```
 
 รองรับหลายคำตอบด้วย `|`:
