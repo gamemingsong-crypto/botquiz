@@ -1,0 +1,21 @@
+{
+  "name": "answer-race-bot",
+  "version": "1.0.0",
+  "description": "Discord quiz race bot that detects the fastest correct answer.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "deploy": "node deploy-commands.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
+  },
+  "overrides": {
+    "undici": "^6.27.0"
+  }
+}
