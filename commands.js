@@ -1,5 +1,4 @@
 import {
-  PermissionFlagsBits,
   SlashCommandBuilder
 } from "discord.js";
 
@@ -41,7 +40,6 @@ export const commands = [
   new SlashCommandBuilder()
     .setName("quiz")
     .setDescription("Question race commands")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand((subcommand) =>
       addQuestionOptions(
         subcommand
@@ -58,6 +56,17 @@ export const commands = [
       subcommand
         .setName("status")
         .setDescription("Show the active question in this channel")
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("points")
+        .setDescription("Check quiz points")
+        .addUserOption((option) =>
+          option
+            .setName("user")
+            .setDescription("User to check. Leave empty to check yourself")
+            .setRequired(false)
+        )
     )
     .addSubcommand((subcommand) =>
       subcommand

@@ -57,6 +57,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
+  const subcommand = interaction.options.getSubcommand();
+
+  if (subcommand === "points") {
+    await handlePoints(interaction);
+    return;
+  }
+
   if (!canManageQuiz(interaction)) {
     await interaction.reply({
       content: "You need Manage Server or Manage Messages permission to manage questions.",
@@ -64,8 +71,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     });
     return;
   }
-
-  const subcommand = interaction.options.getSubcommand();
 
   if (subcommand === "ask") {
     await handleAsk(interaction);
@@ -213,6 +218,16 @@ async function handleStatus(interaction) {
   });
 }
 
+async function handlePoints(interaction) {
+  const targetUser = getUserOption(interaction, "user") || interaction.user;
+  const points = getPoint(interaction.guildId, targetUser.id);
+
+  await interaction.reply({
+    content: `${targetUser} has **${points}** quiz point(s).`,
+    ephemeral: true
+  });
+}
+
 async function handleClearPoints(interaction) {
   const removedCount = await clearGuildPoints(interaction.guildId);
 
@@ -263,6 +278,10 @@ async function addPoint(guildId, userId) {
   return guildScores[userId];
 }
 
+function getPoint(guildId, userId) {
+  return scoreState.guilds?.[guildId]?.[userId] || 0;
+}
+
 async function clearGuildPoints(guildId) {
   const guildScores = getGuildScores(guildId);
   const removedCount = Object.keys(guildScores).length;
@@ -293,6 +312,14 @@ function getBooleanOption(interaction, names) {
     }
   }
   return null;
+}
+
+function getUserOption(interaction, name) {
+  try {
+    return interaction.options.getUser(name);
+  } catch {
+    return null;
+  }
 }
 
 function normalizeAnswer(value, caseSensitive) {
