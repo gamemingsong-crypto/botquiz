@@ -31,22 +31,23 @@ const client = new Client({
 });
 
 const activeQuizzes = new Map();
+const supportedCommands = new Set(["quiz", "question"]);
 
 client.once(Events.ClientReady, (readyClient) => {
-  readyClient.user.setActivity("ตอบคำถามไวสุด | /quiz ask", {
+  readyClient.user.setActivity("fastest answer | /question", {
     type: ActivityType.Watching
   });
   console.log(`Logged in as ${readyClient.user.tag}`);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isChatInputCommand() || interaction.commandName !== "quiz") {
+  if (!interaction.isChatInputCommand() || !supportedCommands.has(interaction.commandName)) {
     return;
   }
 
   if (!interaction.guildId || !interaction.channelId) {
     await interaction.reply({
-      content: "คำสั่งนี้ใช้ได้เฉพาะในเซิร์ฟเวอร์เท่านั้น",
+      content: "This command can only be used in a server.",
       ephemeral: true
     });
     return;
@@ -54,9 +55,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (!canManageQuiz(interaction)) {
     await interaction.reply({
-      content: "ต้องมีสิทธิ์ Manage Server หรือ Manage Messages เพื่อจัดการคำถาม",
+      content: "You need Manage Server or Manage Messages permission to manage questions.",
       ephemeral: true
     });
+    return;
+  }
+
+  if (interaction.commandName === "question") {
+    await handleAsk(interaction);
     return;
   }
 
@@ -96,24 +102,33 @@ client.on(Events.MessageCreate, async (message) => {
   const elapsedText = `${(elapsedMs / 1000).toFixed(2)}s`;
 
   await message.channel.send({
-    content: `✅ ${message.author} ตอบถูกและไวสุด! คำตอบคือ **${escapeMarkdown(quiz.displayAnswer)}** ใช้เวลา **${elapsedText}**`
+    content: `Correct! ${message.author} answered first. Answer: **${escapeMarkdown(quiz.displayAnswer)}** (${elapsedText})`
   });
 });
 
 async function handleAsk(interaction) {
   if (activeQuizzes.has(interaction.channelId)) {
     await interaction.reply({
-      content: "ห้องนี้มีคำถามที่ยังไม่จบอยู่ ใช้ `/quiz stop` ก่อน",
+      content: "This channel already has an active question. Use `/quiz stop` first.",
       ephemeral: true
     });
     return;
   }
 
-  const question = interaction.options.getString("question", true).trim();
-  const answerText = interaction.options.getString("answer", true).trim();
-  const seconds = interaction.options.getInteger("seconds") ?? 60;
-  const matchMode = interaction.options.getString("match") ?? "exact";
-  const caseSensitive = interaction.options.getBoolean("case_sensitive") ?? false;
+  const question = getStringOption(interaction, ["question", "prompt", "q"]);
+  const answerText = getStringOption(interaction, ["answer", "answers", "correct_answer", "correct"]);
+
+  if (!question || !answerText) {
+    await interaction.reply({
+      content: "Missing question or answer. Use `/question question:... answer:...`",
+      ephemeral: true
+    });
+    return;
+  }
+
+  const seconds = getIntegerOption(interaction, ["seconds", "time", "timer"]) ?? 60;
+  const matchMode = getStringOption(interaction, ["match", "mode"]) || "exact";
+  const caseSensitive = getBooleanOption(interaction, ["case_sensitive", "case"]) ?? false;
 
   const rawAnswers = answerText
     .split("|")
@@ -126,14 +141,15 @@ async function handleAsk(interaction) {
 
   if (answers.length === 0) {
     await interaction.reply({
-      content: "ต้องใส่คำตอบอย่างน้อย 1 คำตอบ",
+      content: "Please provide at least one answer.",
       ephemeral: true
     });
     return;
   }
 
-  const expiresAt = Date.now() + seconds * 1000;
-  const timeout = setTimeout(() => timeoutQuiz(interaction.channelId), seconds * 1000);
+  const safeSeconds = Math.min(Math.max(seconds, 5), 3600);
+  const expiresAt = Date.now() + safeSeconds * 1000;
+  const timeout = setTimeout(() => timeoutQuiz(interaction.channelId), safeSeconds * 1000);
 
   activeQuizzes.set(interaction.channelId, {
     guildId: interaction.guildId,
@@ -141,7 +157,7 @@ async function handleAsk(interaction) {
     question,
     answers,
     displayAnswer: rawAnswers[0],
-    matchMode,
+    matchMode: matchMode === "contains" ? "contains" : "exact",
     caseSensitive,
     startedAt: Date.now(),
     expiresAt,
@@ -150,16 +166,16 @@ async function handleAsk(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor(0xffc857)
-    .setTitle("คำถามชิงตอบไว")
+    .setTitle("Fastest Answer")
     .setDescription(question)
     .addFields(
-      { name: "เวลา", value: `${seconds} วินาที`, inline: true },
-      { name: "การตรวจคำตอบ", value: matchMode, inline: true }
+      { name: "Time", value: `${safeSeconds}s`, inline: true },
+      { name: "Match", value: matchMode === "contains" ? "contains" : "exact", inline: true }
     )
-    .setFooter({ text: "พิมพ์คำตอบในแชทนี้ ใครถูกก่อนชนะ" });
+    .setFooter({ text: "Type the answer in this channel. First correct answer wins." });
 
   await interaction.reply({
-    content: "เริ่มคำถามแล้ว",
+    content: "Question started.",
     ephemeral: true
   });
 
@@ -170,7 +186,7 @@ async function handleStop(interaction) {
   const quiz = activeQuizzes.get(interaction.channelId);
   if (!quiz) {
     await interaction.reply({
-      content: "ห้องนี้ไม่มีคำถามที่กำลังรันอยู่",
+      content: "No active question in this channel.",
       ephemeral: true
     });
     return;
@@ -178,7 +194,7 @@ async function handleStop(interaction) {
 
   finishQuiz(interaction.channelId);
   await interaction.reply({
-    content: `หยุดคำถามแล้ว คำตอบคือ **${escapeMarkdown(quiz.displayAnswer)}**`,
+    content: `Question stopped. Answer: **${escapeMarkdown(quiz.displayAnswer)}**`,
     ephemeral: false
   });
 }
@@ -187,7 +203,7 @@ async function handleStatus(interaction) {
   const quiz = activeQuizzes.get(interaction.channelId);
   if (!quiz) {
     await interaction.reply({
-      content: "ห้องนี้ไม่มีคำถามที่กำลังรันอยู่",
+      content: "No active question in this channel.",
       ephemeral: true
     });
     return;
@@ -195,7 +211,7 @@ async function handleStatus(interaction) {
 
   const remainingSeconds = Math.max(0, Math.ceil((quiz.expiresAt - Date.now()) / 1000));
   await interaction.reply({
-    content: `คำถามที่กำลังรัน: **${escapeMarkdown(quiz.question)}**\nเหลือเวลา ${remainingSeconds} วินาที`,
+    content: `Active question: **${escapeMarkdown(quiz.question)}**\nTime left: ${remainingSeconds}s`,
     ephemeral: true
   });
 }
@@ -208,7 +224,7 @@ async function timeoutQuiz(channelId) {
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (channel?.isTextBased()) {
-    await channel.send(`⏰ หมดเวลา! ไม่มีใครตอบถูก คำตอบคือ **${escapeMarkdown(quiz.displayAnswer)}**`);
+    await channel.send(`Time is up! No correct answer. Answer: **${escapeMarkdown(quiz.displayAnswer)}**`);
   }
 }
 
@@ -220,11 +236,47 @@ function finishQuiz(channelId) {
   activeQuizzes.delete(channelId);
 }
 
+function getStringOption(interaction, names) {
+  for (const name of names) {
+    try {
+      const value = interaction.options.getString(name);
+      if (value?.trim()) return value.trim();
+    } catch {
+      // Ignore stale command schemas with different option names.
+    }
+  }
+  return "";
+}
+
+function getIntegerOption(interaction, names) {
+  for (const name of names) {
+    try {
+      const value = interaction.options.getInteger(name);
+      if (Number.isInteger(value)) return value;
+    } catch {
+      // Ignore stale command schemas with different option names.
+    }
+  }
+  return null;
+}
+
+function getBooleanOption(interaction, names) {
+  for (const name of names) {
+    try {
+      const value = interaction.options.getBoolean(name);
+      if (typeof value === "boolean") return value;
+    } catch {
+      // Ignore stale command schemas with different option names.
+    }
+  }
+  return null;
+}
+
 function normalizeAnswer(value, caseSensitive) {
   let text = String(value ?? "")
     .trim()
     .replace(/\s+/g, " ")
-    .replace(/[.!?。！？]+$/g, "")
+    .replace(/[.!?]+$/g, "")
     .trim();
 
   if (!caseSensitive) {
