@@ -57,7 +57,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
-  if (interaction.commandName === "points") {
+  if (interaction.commandName === "points" || interaction.commandName === "point") {
     await handlePoints(interaction);
     return;
   }
@@ -100,6 +100,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await handleClearPoints(interaction);
     return;
   }
+
+  if (subcommand === "winpoints") {
+    await handleWinPoints(interaction);
+    return;
+  }
 });
 
 client.on(Events.MessageCreate, async (message) => {
@@ -116,11 +121,14 @@ client.on(Events.MessageCreate, async (message) => {
   if (!isCorrect) return;
 
   finishQuiz(message.channelId);
-  const totalPoints = await addPoint(message.guildId, message.author.id);
+  const pointResult = await addPoint(message.guildId, message.author.id);
 
-  await message.channel.send({
-    content: `Correct! ${message.author} answered first. Answer: **${escapeMarkdown(quiz.displayAnswer)}** +1 point. Total: **${totalPoints}**`
-  });
+  let content = `Correct! ${message.author} answered first. Answer: **${escapeMarkdown(quiz.displayAnswer)}** +1 point. Total: **${pointResult.totalPoints}**`;
+  if (pointResult.reachedWin) {
+    content += `\nWinner! ${message.author} reached **${pointResult.winPoints}** points.`;
+  }
+
+  await message.channel.send({ content });
 });
 
 async function handleAsk(interaction) {
@@ -228,7 +236,12 @@ async function handleStatus(interaction) {
 }
 
 async function handlePoints(interaction) {
-  const targetUser = getUserOption(interaction, "user") || interaction.user;
+  const targetUser = getUserOption(interaction, "user");
+  if (!targetUser) {
+    await sendLeaderboard(interaction);
+    return;
+  }
+
   const points = getPoint(interaction.guildId, targetUser.id);
 
   await interaction.reply({
@@ -237,11 +250,57 @@ async function handlePoints(interaction) {
   });
 }
 
+async function sendLeaderboard(interaction) {
+  const rows = getLeaderboard(interaction.guildId);
+  const winPoints = getWinPoints(interaction.guildId);
+
+  if (rows.length === 0) {
+    await interaction.reply({
+      content: "No quiz points yet.",
+      ephemeral: true
+    });
+    return;
+  }
+
+  const header = winPoints
+    ? `Quiz points. Win target: **${winPoints}** point(s).`
+    : "Quiz points.";
+  const lines = rows.map(([userId, points], index) =>
+    `${index + 1}. <@${userId}> - **${points}** point(s)`
+  );
+  const chunks = chunkLines([header, "", ...lines], 1900);
+
+  await interaction.reply({
+    content: chunks.shift(),
+    allowedMentions: { users: [] }
+  });
+
+  for (const chunk of chunks) {
+    await interaction.followUp({
+      content: chunk,
+      allowedMentions: { users: [] }
+    });
+  }
+}
+
 async function handleClearPoints(interaction) {
   const removedCount = await clearGuildPoints(interaction.guildId);
 
   await interaction.reply({
     content: `Cleared quiz points for this server. Removed ${removedCount} player score(s).`,
+    ephemeral: false
+  });
+}
+
+async function handleWinPoints(interaction) {
+  const points = getIntegerOption(interaction, "points");
+  const nextValue = Number.isInteger(points) ? points : 0;
+  await setWinPoints(interaction.guildId, nextValue);
+
+  await interaction.reply({
+    content: nextValue > 0
+      ? `Winner announcement target set to **${nextValue}** point(s).`
+      : "Winner announcement target disabled.",
     ephemeral: false
   });
 }
@@ -257,12 +316,15 @@ async function loadScoreState() {
     if (!parsed.guilds || typeof parsed.guilds !== "object") {
       parsed.guilds = {};
     }
+    if (!parsed.settings || typeof parsed.settings !== "object") {
+      parsed.settings = {};
+    }
     return parsed;
   } catch (error) {
     if (error.code !== "ENOENT") {
       console.warn(`Could not load score file: ${error.message}`);
     }
-    return { guilds: {} };
+    return { guilds: {}, settings: {} };
   }
 }
 
@@ -274,21 +336,65 @@ async function saveScoreState() {
 }
 
 function getGuildScores(guildId) {
+  if (!scoreState.guilds || typeof scoreState.guilds !== "object") {
+    scoreState.guilds = {};
+  }
   if (!scoreState.guilds[guildId]) {
     scoreState.guilds[guildId] = {};
   }
   return scoreState.guilds[guildId];
 }
 
+function getGuildSettings(guildId) {
+  if (!scoreState.settings || typeof scoreState.settings !== "object") {
+    scoreState.settings = {};
+  }
+  if (!scoreState.settings[guildId]) {
+    scoreState.settings[guildId] = {};
+  }
+  return scoreState.settings[guildId];
+}
+
 async function addPoint(guildId, userId) {
   const guildScores = getGuildScores(guildId);
-  guildScores[userId] = (guildScores[userId] || 0) + 1;
+  const previousPoints = guildScores[userId] || 0;
+  const totalPoints = previousPoints + 1;
+  guildScores[userId] = totalPoints;
   await saveScoreState();
-  return guildScores[userId];
+
+  const winPoints = getWinPoints(guildId);
+  return {
+    previousPoints,
+    totalPoints,
+    winPoints,
+    reachedWin: Boolean(winPoints && previousPoints < winPoints && totalPoints >= winPoints)
+  };
 }
 
 function getPoint(guildId, userId) {
   return scoreState.guilds?.[guildId]?.[userId] || 0;
+}
+
+function getLeaderboard(guildId) {
+  const guildScores = scoreState.guilds?.[guildId] || {};
+  return Object.entries(guildScores)
+    .filter(([, points]) => Number(points) > 0)
+    .sort((a, b) => Number(b[1]) - Number(a[1]) || a[0].localeCompare(b[0]));
+}
+
+function getWinPoints(guildId) {
+  const value = Number(scoreState.settings?.[guildId]?.winPoints || 0);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+async function setWinPoints(guildId, points) {
+  const settings = getGuildSettings(guildId);
+  if (points > 0) {
+    settings.winPoints = points;
+  } else {
+    delete settings.winPoints;
+  }
+  await saveScoreState();
 }
 
 async function clearGuildPoints(guildId) {
@@ -323,12 +429,41 @@ function getBooleanOption(interaction, names) {
   return null;
 }
 
+function getIntegerOption(interaction, name) {
+  try {
+    return interaction.options.getInteger(name);
+  } catch {
+    return null;
+  }
+}
+
 function getUserOption(interaction, name) {
   try {
     return interaction.options.getUser(name);
   } catch {
     return null;
   }
+}
+
+function chunkLines(lines, maxLength) {
+  const chunks = [];
+  let current = "";
+
+  for (const line of lines) {
+    const next = current ? `${current}\n${line}` : line;
+    if (next.length > maxLength && current) {
+      chunks.push(current);
+      current = line;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) {
+    chunks.push(current);
+  }
+
+  return chunks;
 }
 
 function normalizeAnswer(value, caseSensitive) {

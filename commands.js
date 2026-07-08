@@ -36,6 +36,15 @@ function addQuestionOptions(command) {
     );
 }
 
+function addPointsOptions(command) {
+  return command.addUserOption((option) =>
+    option
+      .setName("user")
+      .setDescription("User to check. Leave empty to show all scores")
+      .setRequired(false)
+  );
+}
+
 export const commands = [
   new SlashCommandBuilder()
     .setName("quiz")
@@ -58,28 +67,38 @@ export const commands = [
         .setDescription("Show the active question in this channel")
     )
     .addSubcommand((subcommand) =>
-      subcommand
-        .setName("points")
-        .setDescription("Check quiz points")
-        .addUserOption((option) =>
-          option
-            .setName("user")
-            .setDescription("User to check. Leave empty to check yourself")
-            .setRequired(false)
-        )
+      addPointsOptions(
+        subcommand
+          .setName("points")
+          .setDescription("Check quiz points")
+      )
     )
     .addSubcommand((subcommand) =>
       subcommand
         .setName("clearpoints")
         .setDescription("Clear all quiz points in this server")
-    ),
-  new SlashCommandBuilder()
-    .setName("points")
-    .setDescription("Check quiz points")
-    .addUserOption((option) =>
-      option
-        .setName("user")
-        .setDescription("User to check. Leave empty to check yourself")
-        .setRequired(false)
     )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("winpoints")
+        .setDescription("Set points needed to announce a winner")
+        .addIntegerOption((option) =>
+          option
+            .setName("points")
+            .setDescription("Points needed to win. Use 0 to disable")
+            .setRequired(true)
+            .setMinValue(0)
+            .setMaxValue(1000000)
+        )
+    ),
+  addPointsOptions(
+    new SlashCommandBuilder()
+      .setName("points")
+      .setDescription("Check quiz points")
+  ),
+  addPointsOptions(
+    new SlashCommandBuilder()
+      .setName("point")
+      .setDescription("Check quiz points")
+  )
 ].map((command) => command.toJSON());
