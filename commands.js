@@ -72,5 +72,14 @@ export const commands = [
       subcommand
         .setName("clearpoints")
         .setDescription("Clear all quiz points in this server")
+    ),
+  new SlashCommandBuilder()
+    .setName("points")
+    .setDescription("Check quiz points")
+    .addUserOption((option) =>
+      option
+        .setName("user")
+        .setDescription("User to check. Leave empty to check yourself")
+        .setRequired(false)
     )
 ].map((command) => command.toJSON());

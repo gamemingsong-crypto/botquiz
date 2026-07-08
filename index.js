@@ -45,7 +45,7 @@ client.once(Events.ClientReady, (readyClient) => {
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isChatInputCommand() || interaction.commandName !== "quiz") {
+  if (!interaction.isChatInputCommand()) {
     return;
   }
 
@@ -54,6 +54,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
       content: "This command can only be used in a server.",
       ephemeral: true
     });
+    return;
+  }
+
+  if (interaction.commandName === "points") {
+    await handlePoints(interaction);
+    return;
+  }
+
+  if (interaction.commandName !== "quiz") {
     return;
   }
 
