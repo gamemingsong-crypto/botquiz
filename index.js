@@ -36,13 +36,21 @@ const client = new Client({
 });
 
 const activeQuizzes = new Map();
+const PRESENCE_REFRESH_MS = 5 * 60 * 1000;
 
-client.once(Events.ClientReady, (readyClient) => {
-  readyClient.user.setActivity("fastest answer | /quiz ask", {
+function applyPresence() {
+  client.user?.setActivity("fastest answer | /quiz ask", {
     type: ActivityType.Watching
   });
+}
+
+client.once(Events.ClientReady, (readyClient) => {
+  applyPresence();
+  setInterval(applyPresence, PRESENCE_REFRESH_MS);
   console.log(`Logged in as ${readyClient.user.tag}`);
 });
+
+client.on("shardResume", applyPresence);
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) {
