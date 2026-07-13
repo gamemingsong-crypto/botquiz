@@ -37,6 +37,10 @@ const client = new Client({
 
 const activeQuizzes = new Map();
 const PRESENCE_REFRESH_MS = 5 * 60 * 1000;
+const QUIZ_MANAGER_IDS = new Set([
+  "1508699693486575707",
+  "1523229935555055637"
+]);
 
 function applyPresence() {
   client.user?.setActivity("ตอบคำถามมหาสนุก | /quiz ask", {
@@ -83,7 +87,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (!canManageQuiz(interaction)) {
     await interaction.reply({
-      content: "You need Manage Server or Manage Messages permission to manage questions.",
+      content: "Only the server owner, an authorized user/role, or a member with Manage Server or Manage Messages can manage questions.",
       ephemeral: true
     });
     return;
@@ -535,6 +539,15 @@ function normalizeAnswer(value, caseSensitive) {
 
 function canManageQuiz(interaction) {
   if (interaction.guild?.ownerId === interaction.user.id) return true;
+  if (QUIZ_MANAGER_IDS.has(interaction.user.id)) return true;
+
+  const memberRoles = interaction.member?.roles;
+  if (memberRoles?.cache?.some((role) => QUIZ_MANAGER_IDS.has(role.id))) {
+    return true;
+  }
+  if (Array.isArray(memberRoles) && memberRoles.some((roleId) => QUIZ_MANAGER_IDS.has(roleId))) {
+    return true;
+  }
 
   const permissions = interaction.memberPermissions;
   return Boolean(
