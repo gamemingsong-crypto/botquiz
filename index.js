@@ -39,7 +39,7 @@ const activeQuizzes = new Map();
 const PRESENCE_REFRESH_MS = 5 * 60 * 1000;
 
 function applyPresence() {
-  client.user?.setActivity("fastest answer | /quiz ask", {
+  client.user?.setActivity("ตอบคำถามมหาสนุก | /quiz ask", {
     type: ActivityType.Watching
   });
 }
