@@ -129,6 +129,7 @@ client.on(Events.MessageCreate, async (message) => {
   if (!isCorrect) return;
 
   finishQuiz(message.channelId);
+  await revealQuizAnswer(quiz, message);
   const pointResult = await addPoint(message.guildId, message.author.id);
 
   let content = `Correct! ${message.author} answered first. Answer: **${escapeMarkdown(quiz.displayAnswer)}** +1 point. Total: **${pointResult.totalPoints}**`;
@@ -179,33 +180,26 @@ async function handleAsk(interaction) {
     return;
   }
 
-  activeQuizzes.set(interaction.channelId, {
+  const quiz = {
     guildId: interaction.guildId,
     channelId: interaction.channelId,
     question,
     answers,
     displayAnswer: rawAnswers[0],
     matchMode: matchMode === "contains" ? "contains" : "exact",
-    caseSensitive
-  });
-
-  const embed = new EmbedBuilder()
-    .setColor(0xffc857)
-    .setTitle("Fastest Answer")
-    .setDescription(question)
-    .addFields(
-      { name: "Match", value: matchMode === "contains" ? "contains" : "exact", inline: true }
-    )
-    .setFooter({ text: "Type the answer in this channel. First correct answer wins." });
+    caseSensitive,
+    questionMessage: null
+  };
+  activeQuizzes.set(interaction.channelId, quiz);
 
   await interaction.reply({
     content: "Question started.",
     ephemeral: true
   });
 
-  await interaction.channel.send({
+  quiz.questionMessage = await interaction.channel.send({
     content: "@everyone",
-    embeds: [embed],
+    embeds: [buildQuizEmbed(quiz)],
     allowedMentions: { parse: ["everyone"] }
   });
 }
@@ -221,8 +215,9 @@ async function handleStop(interaction) {
   }
 
   finishQuiz(interaction.channelId);
+  await markQuizStopped(quiz);
   await interaction.reply({
-    content: `Question stopped. Answer: **${escapeMarkdown(quiz.displayAnswer)}**`,
+    content: "Question stopped. The answer remains hidden.",
     ephemeral: false
   });
 }
@@ -315,6 +310,56 @@ async function handleWinPoints(interaction) {
 
 function finishQuiz(channelId) {
   activeQuizzes.delete(channelId);
+}
+
+function buildQuizEmbed(quiz, { revealed = false, winnerName = "", stopped = false } = {}) {
+  const answer = revealed ? quiz.displayAnswer : "ปิดไว้จนกว่าจะมีคนตอบถูก";
+  let footer = "พิมพ์คำตอบในห้องนี้ คนแรกที่ตอบถูกจะชนะ";
+
+  if (revealed) {
+    footer = `${winnerName} ตอบถูกเป็นคนแรก`;
+  } else if (stopped) {
+    footer = "คำถามนี้ถูกยุติแล้ว โดยไม่ได้เปิดเผยคำตอบ";
+  }
+
+  return new EmbedBuilder()
+    .setColor(revealed ? 0x57f287 : stopped ? 0x95a5a6 : 0xffc857)
+    .setTitle("คำถาม มหาสนุก")
+    .setDescription(`**คำถาม**\n${quiz.question}`)
+    .addFields({
+      name: revealed ? "คำตอบ" : "คำตอบ (ปิดไว้จนกว่าจะมีคนตอบถูก)",
+      value: `\`\`\`\n${escapeCodeBlock(answer)}\n\`\`\``
+    })
+    .setFooter({ text: footer });
+}
+
+async function revealQuizAnswer(quiz, message) {
+  if (!quiz.questionMessage) return;
+
+  try {
+    const winnerName = message.member?.displayName || message.author.username;
+    await quiz.questionMessage.edit({
+      embeds: [buildQuizEmbed(quiz, { revealed: true, winnerName })]
+    });
+  } catch (error) {
+    console.warn(`Could not reveal quiz answer: ${error.message}`);
+  }
+}
+
+async function markQuizStopped(quiz) {
+  if (!quiz.questionMessage) return;
+
+  try {
+    await quiz.questionMessage.edit({
+      embeds: [buildQuizEmbed(quiz, { stopped: true })]
+    });
+  } catch (error) {
+    console.warn(`Could not update stopped quiz: ${error.message}`);
+  }
+}
+
+function escapeCodeBlock(value) {
+  return String(value).replace(/```/g, "`\u200b``");
 }
 
 async function loadScoreState() {
