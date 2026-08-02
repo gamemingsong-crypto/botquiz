@@ -80,6 +80,25 @@ export const commands = [
     )
     .addSubcommand((subcommand) =>
       subcommand
+        .setName("addpoints")
+        .setDescription("Add quiz points to a member (admins only)")
+        .addUserOption((option) =>
+          option
+            .setName("user")
+            .setDescription("Member who will receive the points")
+            .setRequired(true)
+        )
+        .addIntegerOption((option) =>
+          option
+            .setName("points")
+            .setDescription("Number of points to add")
+            .setRequired(true)
+            .setMinValue(1)
+            .setMaxValue(1000000)
+        )
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
         .setName("winpoints")
         .setDescription("Set points needed to announce a winner")
         .addIntegerOption((option) =>

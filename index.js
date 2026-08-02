@@ -85,6 +85,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
+  if (subcommand === "addpoints") {
+    if (!canAddPoints(interaction)) {
+      await interaction.reply({
+        content: "คำสั่งนี้ใช้ได้เฉพาะเจ้าของเซิร์ฟเวอร์หรือแอดมินเท่านั้น",
+        ephemeral: true
+      });
+      return;
+    }
+
+    await handleAddPoints(interaction);
+    return;
+  }
+
   if (!canManageQuiz(interaction)) {
     await interaction.reply({
       content: "Only the server owner, an authorized user/role, or a member with Manage Server or Manage Messages can manage questions.",
@@ -299,6 +312,27 @@ async function handleClearPoints(interaction) {
   });
 }
 
+async function handleAddPoints(interaction) {
+  const targetUser = getUserOption(interaction, "user");
+  const points = getIntegerOption(interaction, "points");
+
+  if (!targetUser || !Number.isInteger(points) || points < 1) {
+    await interaction.reply({
+      content: "กรุณาเลือกสมาชิกและระบุคะแนนอย่างน้อย 1 คะแนน",
+      ephemeral: true
+    });
+    return;
+  }
+
+  const pointResult = await addPoints(interaction.guildId, targetUser.id, points);
+
+  await interaction.reply({
+    content: `เพิ่ม **${points} คะแนน** ให้ ${targetUser} เรียบร้อย คะแนนรวม: **${pointResult.totalPoints} คะแนน**`,
+    allowedMentions: { users: [] },
+    ephemeral: true
+  });
+}
+
 async function handleWinPoints(interaction) {
   const points = getIntegerOption(interaction, "points");
   const nextValue = Number.isInteger(points) ? points : 0;
@@ -413,9 +447,13 @@ function getGuildSettings(guildId) {
 }
 
 async function addPoint(guildId, userId) {
+  return addPoints(guildId, userId, 1);
+}
+
+async function addPoints(guildId, userId, points) {
   const guildScores = getGuildScores(guildId);
-  const previousPoints = guildScores[userId] || 0;
-  const totalPoints = previousPoints + 1;
+  const previousPoints = Number(guildScores[userId]) || 0;
+  const totalPoints = previousPoints + points;
   guildScores[userId] = totalPoints;
   await saveScoreState();
 
@@ -554,6 +592,21 @@ function canManageQuiz(interaction) {
     permissions?.has(PermissionFlagsBits.ManageGuild) ||
     permissions?.has(PermissionFlagsBits.ManageMessages)
   );
+}
+
+function canAddPoints(interaction) {
+  if (interaction.guild?.ownerId === interaction.user.id) return true;
+  if (QUIZ_MANAGER_IDS.has(interaction.user.id)) return true;
+
+  const memberRoles = interaction.member?.roles;
+  if (memberRoles?.cache?.some((role) => QUIZ_MANAGER_IDS.has(role.id))) {
+    return true;
+  }
+  if (Array.isArray(memberRoles) && memberRoles.some((roleId) => QUIZ_MANAGER_IDS.has(roleId))) {
+    return true;
+  }
+
+  return Boolean(interaction.memberPermissions?.has(PermissionFlagsBits.Administrator));
 }
 
 function escapeMarkdown(value) {
